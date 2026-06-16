@@ -812,7 +812,7 @@ app.post('/api/claude', async (req, res) => {
         "API-Subscription-Key": process.env.SARVAM_API_KEY,
       },
       body: JSON.stringify({
-        model: "sarvam-m",
+        model: "sarvam-30b",
         messages: [{ role: "user", content: userMessage }],
         max_tokens: 1500,
         // Sarvam supports a language hint — pass it when not English
@@ -821,7 +821,12 @@ app.post('/api/claude', async (req, res) => {
     });
 
     const data = await response.json();
-    const text = data.choices?.[0]?.message?.content || "";
+    // const text = data.choices?.[0]?.message?.content || "";
+    const message = data.choices?.[0]?.message || {};
+    const text =
+      message.content ??
+      message.reasoning_content ??
+      "";
     if (!text) throw new Error("No response from Sarvam");
     res.json({ content: [{ text }] });
 
