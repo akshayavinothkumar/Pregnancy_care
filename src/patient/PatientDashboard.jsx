@@ -6,6 +6,7 @@ import PatientReportSimplifier from "./PatientReportSimplifier";
 import BabyDevelopmentDashboard from "./BabyDevelopmentDashboard";
 import HealthTracker from "./HealthTracker";
 import HealthReminders from "./HealthReminders";
+import ReportAnalyser from "./ReportAnalyser";
 import { useState } from "react";
 
 const NAV = [
@@ -16,6 +17,7 @@ const NAV = [
   { to:"/patient_dashboard/health",         icon:"❤️", label:"Health Tracker"     },
   { to:"/patient_dashboard/reminders",      icon:"🔔", label:"Reminders"          },
   { to:"/patient_dashboard/reports",        icon:"🩺", label:"Simplify Reports"   },
+  { to:"/patient_dashboard/analyser",       icon:"📄", label:"Report Analyser"    },
 ];
 
 export default function PatientDashboard() {
@@ -138,6 +140,7 @@ export default function PatientDashboard() {
             <Route path="baby"           element={<BabyDevelopmentDashboard />} />
             <Route path="health"         element={<HealthTracker />} />
             <Route path="reminders"      element={<HealthReminders />} />
+            <Route path="analyser"       element={<ReportAnalyser />} />
             {/* Default landing */}
             <Route path="*" element={<DashboardHome />} />
           </Routes>
@@ -156,6 +159,7 @@ function DashboardHome() {
     { to:"/patient_dashboard/reminders",      icon:"🔔", label:"Reminders",         sub:"Daily health nudges",       color:"#FBBF24" },
     { to:"/patient_dashboard/reports",        icon:"🩺", label:"Simplify Reports",  sub:"Understand medical docs",   color:"#A78BFA" },
     { to:"/patient_dashboard/myappointments", icon:"📋", label:"My Appointments",   sub:"View & manage bookings",    color:"#60A5FA" },
+      { to:"/patient_dashboard/analyser",       icon:"📄", label:"Report Analyser",   sub:"In-depth report insights", color:"#F87171" },
   ];
   return (
     <div style={{ padding:28 }}>

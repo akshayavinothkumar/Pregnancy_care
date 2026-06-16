@@ -18,78 +18,92 @@ export default function PatientProfile() {
   const [saving,    setSaving]    = useState(false);
   const [toast,     setToast]     = useState(null);
   const [loading,   setLoading]   = useState(true);
-  const [form,      setForm]      = useState({});
-  const avatarColors = ["#077A7D","#e76f51","#a855f7","#0ea5e9","#f59e0b"];
+const [form, setForm] = useState({});
+const avatarColors = ["#077A7D","#e76f51","#a855f7","#0ea5e9","#f59e0b"];
 
-  useEffect(() => { loadAll(); }, []);
+function showToast(msg, type = "success") {
+  setToast({ msg, type });
+  setTimeout(() => setToast(null), 3000);
+}
 
-  async function loadAll() {
-    setLoading(true);
-    try {
-      const [profRes, patRes] = await Promise.all([
-        fetch(`${API}/pregnancy-profile`, { headers: hdrs() }),
-        fetch(`${API}/patient-details`,   { headers: hdrs() }),
-      ]);
-      const profData = await profRes.json();
-      const patData  = await patRes.json();
+useEffect(() => { loadAll(); }, []);
 
-      const p = profData.profile || profData;
-      const d = patData.patient  || patData;
+async function loadAll() {
+  setLoading(true);
+  try {
+    const [profRes, patRes] = await Promise.all([
+      fetch(`${API}/pregnancy-profile`, { headers: hdrs() }),
+      fetch(`${API}/patient-details`,   { headers: hdrs() }),
+    ]);
 
-      setProfile(p);
-      setPatient(d);
+    // 404 on pregnancy profile is expected for new users — don't treat as error
+    const profData = profRes.ok ? await profRes.json() : {};
+    const patData  = patRes.ok  ? await patRes.json()  : {};
 
-      // Pull name/email from JWT payload for display
-      const token = localStorage.getItem("token");
-      if (token) {
-        try {
-          const payload = JSON.parse(atob(token.split(".")[1]));
-          setUser(payload);
-        } catch {}
-      }
+    const p = profData.profile || null;
+    const d = patData.patient  || null;
 
-      setForm({
-        // Personal
-        fullName:    d?.fullName    || "",
-        phoneNumber: d?.phoneNumber || "",
-        dateOfBirth: d?.dateOfBirth || "",
-        bloodGroup:  d?.bloodGroup  || "",
-        // Pregnancy
-        pregnancyWeek:      p?.pregnancyWeek      || "",
-        pregnancyMonth:     p?.pregnancyMonth     || "",
-        expectedDueDate:    p?.expectedDueDate    || "",
-        LMP:                p?.LMP                || "",
-        firstPregnancy:     p?.firstPregnancy     ?? true,
-        existingConditions: p?.existingConditions || "None",
-      });
-    } catch (e) {
-      console.error(e);
-      showToast("Could not load profile", "error");
+    setProfile(p);
+    setPatient(d);
+
+    const token = localStorage.getItem("token");
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split(".")[1]));
+        setUser(payload);
+      } catch {}
     }
-    setLoading(false);
-  }
 
-  function showToast(msg, type = "success") {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3000);
+    setForm({
+      fullName:           d?.fullName            || "",
+      phoneNumber:        d?.phoneNumber          || "",
+      dateOfBirth:        d?.dateOfBirth          || "",
+      bloodGroup:         d?.bloodGroup           || "",
+      pregnancyWeek:      p?.pregnancyWeek        || "",
+      pregnancyMonth:     p?.pregnancyMonth       || "",
+      expectedDueDate:    p?.expectedDueDate      || "",
+      LMP:                p?.LMP                  || "",
+      firstPregnancy:     p?.firstPregnancy       ?? true,
+      existingConditions: p?.existingConditions   || "None",
+    });
+  } catch (e) {
+    console.error(e);
+    showToast("Could not load profile", "error");
   }
+  setLoading(false);
+}
 
   async function saveChanges() {
-    setSaving(true);
-    try {
-      // Update personal details
-      const r1 = await fetch(`${API}/patient-details`, {
-        method: "PUT", headers: hdrs(),
-        body: JSON.stringify({
-          fullName:    form.fullName,
-          phoneNumber: form.phoneNumber,
-          dateOfBirth: form.dateOfBirth,
-          bloodGroup:  form.bloodGroup,
-        }),
-      });
-      // Update pregnancy profile
-      const r2 = await fetch(`${API}/pregnancy-profile`, {
-        method: "PUT", headers: hdrs(),
+  setSaving(true);
+  try {
+    // Personal details — already handles upsert on the server
+    const r1 = await fetch(`${API}/patient-details`, {
+      method: "PUT", headers: hdrs(),
+      body: JSON.stringify({
+        fullName:    form.fullName,
+        phoneNumber: form.phoneNumber,
+        dateOfBirth: form.dateOfBirth,
+        bloodGroup:  form.bloodGroup,
+      }),
+    });
+
+    // Pregnancy profile — try PUT first, fall back to POST if no profile exists yet
+    let r2 = await fetch(`${API}/pregnancy-profile`, {
+      method: "PUT", headers: hdrs(),
+      body: JSON.stringify({
+        pregnancyWeek:      Number(form.pregnancyWeek),
+        pregnancyMonth:     Number(form.pregnancyMonth),
+        expectedDueDate:    form.expectedDueDate,
+        LMP:                form.LMP,
+        firstPregnancy:     form.firstPregnancy,
+        existingConditions: form.existingConditions,
+      }),
+    });
+
+    // 404 means no profile exists yet — create one instead
+    if (r2.status === 404) {
+      r2 = await fetch(`${API}/pregnancy-profile`, {
+        method: "POST", headers: hdrs(),
         body: JSON.stringify({
           pregnancyWeek:      Number(form.pregnancyWeek),
           pregnancyMonth:     Number(form.pregnancyMonth),
@@ -99,20 +113,21 @@ export default function PatientProfile() {
           existingConditions: form.existingConditions,
         }),
       });
-
-      if (r1.ok && r2.ok) {
-        showToast("Profile updated! ✅");
-        setEditing(false);
-        loadAll();
-      } else {
-        showToast("Some fields failed to save", "error");
-      }
-    } catch (e) {
-      showToast("Network error", "error");
     }
-    setSaving(false);
-  }
 
+    if (r1.ok && r2.ok) {
+      showToast("Profile updated! ✅");
+      setEditing(false);
+      loadAll();
+    } else {
+      const err = await r2.json().catch(() => ({}));
+      showToast(err.message || "Some fields failed to save", "error");
+    }
+  } catch (e) {
+    showToast("Network error", "error");
+  }
+  setSaving(false);
+}
   // Derived values
   const weeksLeft  = profile?.pregnancyWeek ? 40 - Number(profile.pregnancyWeek) : null;
   const progress   = profile?.pregnancyWeek ? Math.round((Number(profile.pregnancyWeek) / 40) * 100) : 0;
@@ -136,7 +151,7 @@ export default function PatientProfile() {
   ];
 
   if (loading) return (
-    <div style={{ background:"#06202B", minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
+    <div style={{ background:"#c5d3d8", minHeight:"100vh", display:"flex", alignItems:"center", justifyContent:"center" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ fontSize:48, animation:"float 2s ease-in-out infinite" }}>🤰</div>
         <p style={{ color:"#7AE2CF", fontFamily:"'Nunito',sans-serif", marginTop:12 }}>Loading your profile…</p>
@@ -153,7 +168,7 @@ export default function PatientProfile() {
         @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
         @keyframes fadeUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
         @keyframes toastIn { from{opacity:0;transform:translateX(40px)} to{opacity:1;transform:translateX(0)} }
-        .tab-btn:hover { background: rgba(122,226,207,0.12) !important; }
+        .tab-btn:hover { background: hsla(169, 64%, 68%, 0.12) !important; }
         .inp:focus { border-color: #7AE2CF !important; outline: none; }
         .inp:focus + label, .inp:not(:placeholder-shown) + label { display: none; }
         .edit-btn:hover { background: rgba(122,226,207,0.2) !important; }
